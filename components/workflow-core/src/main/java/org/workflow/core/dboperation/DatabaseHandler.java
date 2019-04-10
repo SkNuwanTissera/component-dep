@@ -8,6 +8,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.workflow.core.model.HistoryDetails;
 import org.workflow.core.model.HistoryResponse;
+import org.workflow.core.model.SubscriptionHistoryDetails;
 import org.workflow.core.util.Tables;
 
 import java.sql.Connection;
@@ -154,6 +155,106 @@ public class DatabaseHandler {
              }
 
            
+
+            log.debug("get Operator Wise API Traffic");
+
+            int size = 0;
+            rs = ps.executeQuery();
+            while (rs.next()) {
+                /** Does not consider default application */
+                if (!rs.getString("name").equalsIgnoreCase("DefaultApplication")) {
+                    applist.add(new HistoryDetails(rs));
+                    size++;
+                }
+            }
+
+            historyResponse.setApplications(applist);
+            historyResponse.setStart(offset);
+            historyResponse.setSize(size);
+            historyResponse.setTotal(getApplicationCount(applicationId, applicationName, subscriber, operator, status));
+
+
+        } catch (Exception e) {
+            handleException("getApprovalHistory", e);
+        } finally {
+            DbUtils.closeAllConnections(ps, conn, rs);
+        }
+        return historyResponse;
+    }
+
+    public HistoryResponse getSubscriptionApprovalHistory(int subscriptionId, String apiName, String applicationName, String tier, String operator, String createdBy) throws BusinessException {
+
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        StringBuilder sql = new StringBuilder();
+        List<SubscriptionHistoryDetails> applist = new ArrayList<SubscriptionHistoryDetails>();
+        HistoryResponse historyResponse = new HistoryResponse();
+        String depDB = DbUtils.getDbNames().get(DataSourceNames.WSO2TELCO_DEP_DB);
+        String apimgtDB = DbUtils.getDbNames().get(DataSourceNames.WSO2AM_DB);
+
+        sql.append("SELECT * FROM ")
+                .append("(SELECT application_id, name,created_by,IF(description IS NULL, 'Not Specified', description) AS description,")
+                .append("ELT(FIELD(application_status, 'CREATED', 'APPROVED', 'REJECTED'), 'PENDING APPROVE', 'APPROVED', 'REJECTED') AS app_status,")
+                .append("(SELECT GROUP_CONCAT(opco.operatorname SEPARATOR ',') FROM " + depDB + "." + Tables.DEP_OPERATOR_APPS.getTObject() + " opcoApp ")
+                .append("INNER JOIN " + depDB + "." + Tables.DEP_OPERATORS.getTObject() + " opco ON opcoApp.operatorid = opco.id ")
+                .append("WHERE opcoApp.isactive = 1 AND opcoApp.applicationid = amapp.application_id GROUP BY opcoApp.applicationid) AS oparators ")
+                .append("FROM " + apimgtDB + "." + Tables.AM_APPLICATION.getTObject() + " amapp ")
+                .append("WHERE EXISTS( SELECT 1 FROM " + depDB + "." + Tables.DEP_OPERATOR_APPS.getTObject() + " opcoApp ")
+                .append("INNER JOIN " + depDB + "." + Tables.DEP_OPERATORS.getTObject() + " opco ON opcoApp.operatorid = opco.id ")
+                .append("WHERE opcoApp.isactive LIKE ? AND opcoApp.applicationid = amapp.application_id AND ")
+                .append("opco.operatorname LIKE ? AND amapp.application_id LIKE ? AND amapp.name LIKE ? AND amapp.subscriber_id LIKE ? ) ");
+
+        if(status!=null && !status.isEmpty()&& !status.equals(ALL)) {
+            sql	.append("AND amapp.application_status LIKE ? ");
+        }
+
+        sql.append("ORDER BY application_id) t")
+                .append(" LIMIT ?,?");
+
+        if (!subscriber.equals(ALL)) {
+            subscriber = String.valueOf(getSubscriberkey(subscriber));
+        }
+
+        try {
+            conn = DbUtils.getDbConnection(DataSourceNames.WSO2AM_DB);
+            ps = conn.prepareStatement(sql.toString());
+            if (operator.equals(ALL)) {
+                ps.setString(2, "%");
+                ps.setString(1, "%");
+            } else {
+                ps.setString(2, operator);
+                ps.setString(1,"1");
+            }
+            if (applicationId == 0) {
+                ps.setString(3, "%");
+            } else {
+                ps.setInt(3, applicationId);
+            }
+
+            if (applicationName.equals(ALL)) {
+                ps.setString(4, "%");
+            } else {
+                ps.setString(4, applicationName);
+            }
+
+            if (subscriber.equals(ALL)) {
+                ps.setString(5, "%");
+            } else {
+                ps.setInt(5, Integer.parseInt(subscriber));
+            }
+
+            if (status!=null && !status.isEmpty() && !status.equals(ALL))  {
+                ps.setString(6, status);
+
+                ps.setInt(7, offset);
+                ps.setInt(8, count);
+            }else{
+                ps.setInt(6, offset);
+                ps.setInt(7, count);
+            }
+
+
 
             log.debug("get Operator Wise API Traffic");
 

@@ -4,6 +4,7 @@ import com.wso2telco.core.dbutils.exception.BusinessException;
 import com.wso2telco.core.dbutils.util.ApprovalRequest;
 import com.wso2telco.core.dbutils.util.Callback;
 import com.wso2telco.core.userprofile.dto.UserProfileDTO;
+import jdk.nashorn.internal.codegen.CompilerConstants;
 import org.workflow.core.activity.ActivityRestClient;
 import org.workflow.core.activity.RestClientFactory;
 import org.workflow.core.activity.TaskApprovalRequest;
@@ -11,11 +12,7 @@ import org.workflow.core.dboperation.DatabaseHandler;
 import org.workflow.core.execption.WorkflowExtensionException;
 import org.workflow.core.model.*;
 import org.workflow.core.service.AbsractQueryBuilder;
-import org.workflow.core.util.AppVariable;
-import org.workflow.core.util.DeploymentTypes;
-import org.workflow.core.util.HistoryVariable;
-import org.workflow.core.util.Messages;
-import org.workflow.core.util.WorkFlowVariables;
+import org.workflow.core.util.*;
 
 import java.util.*;
 
@@ -154,11 +151,80 @@ abstract class AbstractAppRequestBuilder extends AbsractQueryBuilder {
         return handler.getApprovalHistory(subscriber, applicationName, applicationId, operator, status, offset, count);
     }
 
+    public HistoryResponse getSubscriptionApprovalHistory(String subscriber, String applicationName, int applicationId, String operator, String status, int offset, int count) throws BusinessException {
+        DatabaseHandler handler = new DatabaseHandler();
+        return handler.getApprovalHistory(subscriber, applicationName, applicationId, operator, status, offset, count);
+    }
+
     @Override
     protected abstract Callback buildApprovalRequest(ApprovalRequest approvalRequest, UserProfileDTO userProfile) throws BusinessException;
 
     protected String getProcessDefinitionKey() {
         return depType.getAppProcessType();
+    }
+
+    @Override
+    public Callback getSubscriptionHistoryData(TaskSearchDTO searchDTO, UserProfileDTO userProfile) throws BusinessException {
+        String filterStr = searchDTO.getFilterBy();
+        final Map<String, String> varMap = new HashMap<String, String>();
+        Callback returnCall;
+
+        if (filterStr != null && !filterStr.trim().isEmpty()) {
+            final String[] filterCriterias = filterStr.split(",");
+            for (String criteria : filterCriterias) {
+                String[] criteriaArray = criteria.split(":");
+                if (criteriaArray.length == 2 && !criteriaArray[0].trim().isEmpty() && !criteriaArray[1].trim().isEmpty()
+                        && historyFilterMap().containsKey(criteriaArray[0].trim().toLowerCase())) {
+                    varMap.put(historyFilterMap().get(criteriaArray[0].trim().toLowerCase()), criteriaArray[1]);
+                }
+            }
+        }
+
+        int subscriptionId;
+        String apiName = ALL;
+        String applicationName =ALL;
+        String tier = ALL;
+        String operator = ALL;
+        String createdBy = ALL;
+
+        if (varMap.containsKey(SubscriptionHistoryVariable.ID.key())) {
+            subscriptionId = Integer.parseInt(varMap.get(SubscriptionHistoryVariable.ID.key()));
+        }
+        else {
+            subscriptionId = 0;
+        }
+
+        if(varMap.containsKey(SubscriptionHistoryVariable.APINAME.key())){
+            apiName = varMap.get(SubscriptionHistoryVariable.APINAME.key());
+        }
+
+        if (varMap.containsKey(SubscriptionHistoryVariable.APPNAME.key())) {
+            applicationName = varMap.get(SubscriptionHistoryVariable.APINAME.key());
+        }
+
+        if (varMap.containsKey(SubscriptionHistoryVariable.TIER.key())) {
+            tier = varMap.get(SubscriptionHistoryVariable.TIER.key());
+        }
+
+        if (varMap.containsKey(SubscriptionHistoryVariable.CREATED_BY.key())) {
+            createdBy = varMap.get(SubscriptionHistoryVariable.CREATED_BY.key());
+        }
+
+        if(!isAdmin(userProfile)){
+            operator = userProfile.getUserName().toUpperCase();
+        }else if(varMap.containsKey(SubscriptionHistoryVariable.OPERATOR.key())){
+            operator = varMap.get(SubscriptionHistoryVariable.OPERATOR.key());
+        }
+
+        try {
+            HistoryResponse apiRequests = getSubscriptionApprovalHistory( subscriber, applicationName, applicationId, operator, status, searchDTO.getStart(), searchDTO.getBatchSize());
+            returnCall = new Callback().setPayload(apiRequests).setSuccess(true).setMessage(Messages.APPLICATION_HISTORY_SUCCESS.getValue());
+        } catch (Exception e) {
+            returnCall = new Callback().setPayload(e.getMessage()).setSuccess(false).setMessage(Messages.APPLICATION_HISTORY_FAILED.getValue());
+        }
+        return returnCall;
+
+
     }
 
     @Override
