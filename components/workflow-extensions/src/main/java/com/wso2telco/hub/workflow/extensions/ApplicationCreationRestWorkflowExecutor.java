@@ -249,7 +249,6 @@ public class ApplicationCreationRestWorkflowExecutor extends WorkflowExecutor {
                 } catch (APIManagementException e) {
                     String msg = "Error occurred when updating the status of the Application creation " + "process";
                     log.error(msg, e);
-                    auditLog.error(msg, e);
                     throw new WorkflowException(msg, e);
                 }
 
@@ -304,8 +303,9 @@ public class ApplicationCreationRestWorkflowExecutor extends WorkflowExecutor {
         }
 
         // if application has a subscription task clean
+        String applicationId = null;
         try {
-            String applicationId = workflowDTO.getWorkflowReference();
+            applicationId = workflowDTO.getWorkflowReference();
             WorkflowDAO workflowDAO = new WorkflowDAO();
             List<WorkflowReferenceDTO> workflowByAppId = workflowDAO.findWorkflowByAppId(applicationId);
             for (WorkflowReferenceDTO workflowReferenceDTO : workflowByAppId) {
@@ -323,6 +323,14 @@ public class ApplicationCreationRestWorkflowExecutor extends WorkflowExecutor {
         log.info(logm);
         auditLog.info(logm);
 
+        try {
+            Application app = dao.getApplicationById(Integer.parseInt(applicationId));
+            String audit = "{\"action\":\"deleted\",\"typ\":\"Application\",\"info\":\"{\\\"tier\\\":"+app.getTier()+",\\\"name\\\":"+app.getName()+",\\\"callbackURL\\\":"+app.getCallbackUrl()+"}\"}";
+            log.info(audit);
+
+        } catch (APIManagementException e) {
+            e.printStackTrace();
+        }
     }
     /**\
      * replaced by WorkFlowHealper.getDeploymentType()

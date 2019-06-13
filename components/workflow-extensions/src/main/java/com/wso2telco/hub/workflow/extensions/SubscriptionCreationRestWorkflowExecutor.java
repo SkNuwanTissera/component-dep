@@ -382,7 +382,7 @@ public class SubscriptionCreationRestWorkflowExecutor extends WorkflowExecutor {
         } catch (WorkflowExtensionException e) {
             throw new WorkflowException("WorkflowException: " + e.getMessage(), e);
         }
-        String deletelog = "Subscription Creation approval process instance task with business key " +
+        String deletelog = "[Subscription Deleted] Subscription approval process instance task with business key " +
                 workflowExtRef + " deleted successfully";
         log.info(deletelog);
         auditLog.info(deletelog);
